@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shalfa WH — تسجيل الحركات</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--fg:#14202b;--mut:#64748b;--line:#dbe3ea;--acc:#0f766e;--acc2:#0b5c56;--bad:#b91c1c;--warn:#b45309;--ok:#15803d}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1419;--card:#16202a;--fg:#e6edf3;--mut:#93a4b5;--line:#2a3a48;--acc:#2dd4bf;--acc2:#5eead4;--bad:#f87171;--warn:#fbbf24;--ok:#4ade80;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,"Segoe UI",Tahoma,sans-serif}
+.w{max-width:980px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0}h2{font-size:16px;margin:0 0 10px}
+.top{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
+input,select,button{font:inherit;color:inherit}
+input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+button{padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);cursor:pointer}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}button.p:disabled{opacity:.5}
+.row{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:transparent}.seg button.on{background:var(--acc);color:#fff}
+.ln{display:grid;grid-template-columns:28px minmax(170px,2fr) 110px minmax(120px,2fr);gap:8px;align-items:center;margin-bottom:6px}
+.ln .n{color:var(--mut);text-align:center}.info{font-size:12.5px;color:var(--mut);min-width:0}
+.bad{color:var(--bad)}.ok{color:var(--ok)}.warn{color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+.sc{overflow-x:auto}.msg{padding:8px 12px;border-radius:8px;margin:8px 0;font-size:14px}
+.msg.e{background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad)}.msg.s{background:color-mix(in srgb,var(--ok) 15%,transparent);color:var(--ok)}
+.tag{font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid var(--line)}
+.login{max-width:380px;margin:12vh auto}
+@media(max-width:640px){.ln{grid-template-columns:24px 1fr 90px}.ln .info{grid-column:2/4}}
+</style>
+</head>
+<body><div class="w" id="app"></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+const SUPABASE_URL="https://rswrkkwpsrhcceuxkmaz.supabase.co";
+const SUPABASE_KEY="sb_publishable_z8ZMIa6zXaxaG6FjIa6IAA_Qsqz2oIM"; // مفتاح عام: لا يقرأ شيء بدون تسجيل دخول (RLS)
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+const $=id=>document.getElementById(id),esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const F=n=>n==null?"—":(+n).toLocaleString("en",{maximumFractionDigits:2});
+const S={user:null,items:[],byCode:{},parties:{issue:[],receipt:[]},kind:"issue",lines:[],recent:[],msg:null,busy:false};
+const blank=()=>Array.from({length:10},()=>({v:"",q:""}));S.lines=blank();
+const codeOf=v=>{const m=/^\s*([A-Za-z]{1,4}-\d+)/.exec(v||"");return m?m[1].toUpperCase():""};
+const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+function say(t,k){S.msg={t,k};render()}
+async function boot(){const{data}=await sb.auth.getSession();S.user=data.session?.user||null;sb.auth.onAuthStateChange((_e,s)=>{const u=s?.user||null;if((u&&u.id)!=(S.user&&S.user.id)){S.user=u;u?load():render()}});S.user?load():render()}
+async function load(){render();try{
+ const a=await sb.from("app_items").select("code,name,unit,category,sheet_balance,pending_in,pending_out,balance_now,min_qty,level").range(0,1999);
+ const p=await sb.from("app_parties").select("kind,name").range(0,4999);
+ const r=await sb.from("app_movements").select("*").order("created_at",{ascending:false}).limit(100);
+ if(a.error||p.error||r.error)throw (a.error||p.error||r.error);
+ S.items=a.data;S.byCode={};S.items.forEach(x=>S.byCode[x.code.toUpperCase()]=x);
+ S.parties={issue:[],receipt:[]};p.data.forEach(x=>S.parties[x.kind]?.push(x.name));
+ S.recent=r.data;S.msg=null}catch(e){S.msg={t:"تعذر تحميل البيانات: "+(e.message||e),k:"e"}}render()}
+function render(){const el=$("app");
+ if(!S.user){el.innerHTML=`<div class="card login"><h1>Shalfa WH Control</h1><p style="color:var(--mut)">تسجيل الحركات — دخول المصرّح لهم فقط</p>
+ <label>البريد الإلكتروني</label><input id="em" type="email" autocomplete="username"><div style="height:8px"></div>
+ <label>كلمة المرور</label><input id="pw" type="password" autocomplete="current-password"><div style="height:12px"></div>
+ <button class="p" id="go" style="width:100%">دخول</button>${S.msg?`<div class="msg ${S.msg.k}">${esc(S.msg.t)}</div>`:""}</div>`;
+  const go=async()=>{const{error}=await sb.auth.signInWithPassword({email:$("em").value.trim(),password:$("pw").value});if(error)say("بيانات الدخول غير صحيحة","e")};
+  $("go").onclick=go;$("pw").onkeydown=e=>{if(e.key==="Enter")go()};return}
+ const iss=S.kind==="issue",dl=S.parties[S.kind].slice().sort().map(n=>`<option value="${esc(n)}">`).join("");
+ const keep=document.activeElement&&document.activeElement.id;
+ el.innerHTML=`<div class="top"><div><h1>تسجيل حركة مخزن</h1><div style="color:var(--mut);font-size:12.5px">${esc(S.user.email)} · ${S.items.length} صنف</div></div>
+ <div><button id="rl">تحديث</button> <button id="lo">خروج</button></div></div>
+ ${S.msg?`<div class="msg ${S.msg.k}">${esc(S.msg.t)}</div>`:""}
+ <div class="card"><div class="top" style="margin-bottom:10px"><div class="seg"><button data-k="issue" class="${iss?"on":""}">صرف</button><button data-k="receipt" class="${iss?"":"on"}">توريد</button></div></div>
+ <div class="row"><div><label>التاريخ</label><input id="dt" type="date" value="${today()}"></div>
+ <div><label>${iss?"المستلم (مهندس / مشرف)":"المورد"}</label><input id="pt" list="pl" autocomplete="off"><datalist id="pl">${dl}</datalist></div>
+ <div><label>رقم الإذن / أمر الشغل</label><input id="dn"></div></div>
+ <datalist id="il">${S.items.map(x=>`<option value="${esc(x.code)} — ${esc(x.name)}">`).join("")}</datalist>
+ <h2 style="margin-top:14px">الأصناف</h2><div id="lines"></div>
+ <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap"><button id="more">+ سطر</button><button class="p" id="sv" ${S.busy?"disabled":""}>حفظ الحركة</button></div></div>
+ <div class="card"><div class="top" style="margin-bottom:6px"><h2 style="margin:0">آخر الحركات المسجّلة من التطبيق</h2><button id="csv">تصدير CSV</button></div>
+ <div style="color:var(--mut);font-size:12.5px;margin-bottom:8px">«معلّقة» = لم تُرحَّل للشيت بعد وتُحسب في الرصيد الحالي هنا. بعد إدخالها في الشيت اضغط «ترحيل» حتى لا تُحسب مرتين.</div>
+ <div class="sc"><table><thead><tr><th>التاريخ</th><th>النوع</th><th>الكود</th><th>الصنف</th><th>الكمية</th><th>الطرف</th><th>الإذن</th><th>بواسطة</th><th>الحالة</th><th></th></tr></thead><tbody>
+ ${S.recent.map(m=>`<tr><td>${esc(m.date)}</td><td>${m.kind==="issue"?"صرف":"توريد"}</td><td>${esc(m.code)}</td><td>${esc(S.byCode[m.code.toUpperCase()]?.name||"")}</td><td>${F(m.qty)}</td><td>${esc(m.party||"")}</td><td>${esc(m.doc_no||"")}</td><td>${esc((m.created_by_email||"").split("@")[0])}</td>
+ <td>${m.posted?'<span class="tag ok">مُرحَّلة</span>':'<span class="tag warn">معلّقة</span>'}</td>
+ <td>${m.posted?"":`<button data-post="${m.id}">ترحيل</button> `}${!m.posted&&m.created_by===S.user.id?`<button data-del="${m.id}">حذف</button>`:""}</td></tr>`).join("")||'<tr><td colspan="10" style="color:var(--mut)">لا توجد حركات بعد</td></tr>'}
+ </tbody></table></div></div>`;
+ drawLines();
+ el.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{S.kind=b.dataset.k;S.msg=null;render()});
+ $("rl").onclick=load;$("lo").onclick=()=>sb.auth.signOut();$("more").onclick=()=>{S.lines.push({v:"",q:""});drawLines()};$("sv").onclick=save;$("csv").onclick=csv;
+ el.querySelectorAll("[data-post]").forEach(b=>b.onclick=async()=>{const{error}=await sb.from("app_movements").update({posted:true}).eq("id",b.dataset.post);error?say(error.message,"e"):load()});
+ el.querySelectorAll("[data-del]").forEach(b=>b.onclick=async()=>{const{error}=await sb.from("app_movements").delete().eq("id",b.dataset.del);error?say(error.message,"e"):load()});
+}
+function drawLines(){const box=$("lines");if(!box)return;const iss=S.kind==="issue";
+ box.innerHTML=S.lines.map((l,i)=>`<div class="ln"><span class="n">${i+1}</span><input data-v="${i}" list="il" placeholder="كود أو اسم الصنف" value="${esc(l.v)}" autocomplete="off"><input data-q="${i}" type="number" min="0" step="any" inputmode="decimal" placeholder="الكمية" value="${esc(l.q)}"><div class="info" id="in${i}"></div></div>`).join("");
+ S.lines.forEach((_,i)=>info(i));
+ box.querySelectorAll("[data-v]").forEach(e=>e.oninput=()=>{S.lines[+e.dataset.v].v=e.value;info(+e.dataset.v)});
+ box.querySelectorAll("[data-q]").forEach(e=>e.oninput=()=>{S.lines[+e.dataset.q].q=e.value;info(+e.dataset.q)})}
+function info(i){const l=S.lines[i],el=$("in"+i);if(!el)return;const c=codeOf(l.v),it=S.byCode[c];if(!l.v){el.textContent="";return}
+ if(!it){el.innerHTML='<span class="bad">كود غير موجود</span>';return}
+ const q=+l.q||0,after=S.kind==="issue"?it.balance_now-q:+it.balance_now+q,bad=S.kind==="issue"&&after<0;
+ el.innerHTML=`${esc(it.unit||"")} · الرصيد <b>${F(it.balance_now)}</b>${q?` ← <b class="${bad?"bad":"ok"}">${F(after)}</b>`:""}${bad?' <span class="bad">يتجاوز الرصيد</span>':""}${it.min_qty>0&&after<=it.min_qty&&q?' <span class="warn">تحت الحد الأدنى</span>':""}`}
+async function save(){if(S.busy)return;const iss=S.kind==="issue",date=$("dt").value,party=$("pt").value.trim(),doc=$("dn").value.trim();
+ if(!date)return say("اختر التاريخ","e");if(!party)return say(iss?"اكتب اسم المستلم":"اكتب اسم المورد","e");
+ const rows=[],seen={};for(const l of S.lines){if(!l.v&&!l.q)continue;const c=codeOf(l.v),it=S.byCode[c],q=+l.q;
+  if(!it)return say("كود غير موجود: "+(l.v||"(فارغ)"),"e");if(!(q>0))return say("كمية غير صحيحة للصنف "+c,"e");
+  seen[c]=(seen[c]||0)+q;if(iss&&seen[c]>it.balance_now)return say(`الكمية المصروفة من ${c} أكبر من الرصيد (${F(it.balance_now)})`,"e");
+  rows.push({kind:S.kind,date,code:it.code,party,qty:q,doc_no:doc||null})}
+ if(!rows.length)return say("أضف صنفاً واحداً على الأقل","e");
+ S.busy=true;render();const{error}=await sb.from("app_movements").insert(rows);S.busy=false;
+ if(error){say("فشل الحفظ: "+error.message,"e");return}
+ S.lines=blank();await load();say(`تم حفظ ${rows.length} سطر`,"s")}
+function csv(){const h=["date","kind","code","qty","party","doc_no","posted","by"],q=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+ const t="﻿"+h.join(",")+"\n"+S.recent.map(m=>[m.date,m.kind,m.code,m.qty,m.party,m.doc_no,m.posted,m.created_by_email].map(q).join(",")).join("\n");
+ const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:"text/csv;charset=utf-8"}));a.download="movements.csv";a.click()}
+boot();
+</script></body></html>
